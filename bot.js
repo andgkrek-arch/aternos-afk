@@ -1,81 +1,103 @@
 const mineflayer = require('mineflayer');
 const http = require('http');
 
+// === Настройки ===
 const config = {
   host: 'Adidaus.aternos.me',
   port: 43947,
-  username: 'Birzui',
+  username: 'Birzui',          // твой ник бота
   version: '1.21.1',
-  password: 'BotPass123'
+  password: 'BotPass123'       // пароль от AuthMe
 };
 
 let bot;
 let isLoggedIn = false;
 
-// Веб-сервер для Render
+// Создаём простое веб-сервер (нужно для Render)
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Bot is alive\n');
+  res.end('Bot is running\n');
 });
-server.listen(10000, () => {
-  console.log('Веб-сервер запущен на порту 10000');
-});
+server.listen(10000);
 
+// Функция создания бота
 function createBot() {
-  console.log('==============================');
-  console.log('Пытаюсь подключиться к серверу...');
-  console.log('Host:', config.host);
-  console.log('Port:', config.port);
-  console.log('Version:', config.version);
-  console.log('==============================');
+  console.log('Запускаю бота...');
 
   bot = mineflayer.createBot({
     host: config.host,
     port: config.port,
     username: config.username,
     version: config.version,
-    hideErrors: false,
-    checkTimeoutInterval: 60000
+    hideErrors: true
   });
 
   bot.on('login', () => {
-    console.log('✅ Успешно залогинился на сервер');
+    console.log('Подключился к серверу');
+    isLoggedIn = false;
   });
 
   bot.on('spawn', () => {
-    console.log('✅ Заспавнился в мире');
-    isLoggedIn = false;
+    console.log('Заспавнился');
 
     setTimeout(() => {
-      bot.chat(`/login ${config.password}`);
-      console.log('→ Отправил /login');
-    }, 3000);
+      if (!isLoggedIn) {
+        bot.chat(`/login ${config.password}`);
+        console.log('Отправил /login');
+      }
+    }, 2500);
+
+    // Анти-АФК
+    setInterval(() => {
+      if (!bot || !isLoggedIn) return;
+      try {
+        bot.setControlState('jump', true);
+        setTimeout(() => bot.setControlState('jump', false), 400);
+        bot.look(Math.random() * Math.PI * 2, 0);
+      } catch (e) {}
+    }, 30000);
   });
 
   bot.on('messagestr', (msg) => {
-    console.log('[Чат]', msg);
-
     const message = msg.toLowerCase();
+    console.log('[Сервер]:', msg);
 
-    if (message.includes('успешно') || message.includes('вы вошли') || message.includes('successfully')) {
+    if (!isLoggedIn && (message.includes('login') || message.includes('войдите'))) {
+      bot.chat(`/login ${config.password}`);
+    }
+
+    if (!isLoggedIn && (message.includes('register') || message.includes('зарегистрируйтесь'))) {
+      bot.chat(`/register ${config.password} ${config.password}`);
+    }
+
+    if (message.includes('успешно') || message.includes('successfully') || message.includes('вы вошли')) {
       isLoggedIn = true;
-      console.log('✅ Успешно авторизовался через AuthMe');
+      console.log('Успешно авторизовался!');
     }
   });
 
   bot.on('kicked', (reason) => {
-    console.log('❌ Кикнули:', reason.toString());
-    setTimeout(createBot, 15000);
+    console.log('Кикнули:', reason.toString());
+    reconnect();
   });
 
   bot.on('end', () => {
-    console.log('❌ Соединение закрыто');
-    setTimeout(createBot, 15000);
+    console.log('Соединение разорвано');
+    reconnect();
   });
 
   bot.on('error', (err) => {
-    console.log('❌ Ошибка:', err.message);
+    if (err.message.includes('PartialReadError')) return; // игнорируем
+    console.log('Ошибка:', err.message);
   });
 }
 
+// Переподключение
+function reconnect() {
+  isLoggedIn = false;
+  console.log('Перезапуск через 10 секунд...');
+  setTimeout(createBot, 10000);
+}
+
+// Запуск
 createBot();
