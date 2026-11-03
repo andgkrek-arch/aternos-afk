@@ -1,78 +1,103 @@
 const mineflayer = require('mineflayer');
+const http = require('http');
 
-const bot = mineflayer.createBot({
+// === Настройки ===
+const config = {
   host: 'Adidaus.aternos.me',
   port: 43947,
-  username: 'Birzui',
-  version: '1.21.1'
+  username: 'Birzui',          // твой ник бота
+  version: '1.21.1',
+  password: 'BotPass123'       // пароль от AuthMe
+};
+
+let bot;
+let isLoggedIn = false;
+
+// Создаём простое веб-сервер (нужно для Render)
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running\n');
 });
+server.listen(10000);
 
-// Более нормальный пароль (AuthMe часто не принимает слишком простые)
-const password = 'BotPass123';
+// Функция создания бота
+function createBot() {
+  console.log('Запускаю бота...');
 
-let isLoggedIn = false; // чтобы не спамить
+  bot = mineflayer.createBot({
+    host: config.host,
+    port: config.port,
+    username: config.username,
+    version: config.version,
+    hideErrors: true
+  });
 
-bot.on('login', () => {
-  console.log('Подключился к серверу');
-});
+  bot.on('login', () => {
+    console.log('Подключился к серверу');
+    isLoggedIn = false;
+  });
 
-bot.on('spawn', () => {
-  console.log('Заспавнился в мире');
+  bot.on('spawn', () => {
+    console.log('Заспавнился');
 
-  // Пробуем войти через 3 секунды
-  setTimeout(() => {
-    if (!isLoggedIn) {
-      bot.chat(`/login ${password}`);
-      console.log('Пробую /login');
+    setTimeout(() => {
+      if (!isLoggedIn) {
+        bot.chat(`/login ${config.password}`);
+        console.log('Отправил /login');
+      }
+    }, 2500);
+
+    // Анти-АФК
+    setInterval(() => {
+      if (!bot || !isLoggedIn) return;
+      try {
+        bot.setControlState('jump', true);
+        setTimeout(() => bot.setControlState('jump', false), 400);
+        bot.look(Math.random() * Math.PI * 2, 0);
+      } catch (e) {}
+    }, 30000);
+  });
+
+  bot.on('messagestr', (msg) => {
+    const message = msg.toLowerCase();
+    console.log('[Сервер]:', msg);
+
+    if (!isLoggedIn && (message.includes('login') || message.includes('войдите'))) {
+      bot.chat(`/login ${config.password}`);
     }
-  }, 3000);
 
-  // Анти-АФК
-  setInterval(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn && (message.includes('register') || message.includes('зарегистрируйтесь'))) {
+      bot.chat(`/register ${config.password} ${config.password}`);
+    }
 
-    bot.setControlState('jump', true);
-    setTimeout(() => bot.setControlState('jump', false), 400);
+    if (message.includes('успешно') || message.includes('successfully') || message.includes('вы вошли')) {
+      isLoggedIn = true;
+      console.log('Успешно авторизовался!');
+    }
+  });
 
-    const yaw = Math.random() * Math.PI * 2;
-    bot.look(yaw, 0);
-  }, 25000);
-});
+  bot.on('kicked', (reason) => {
+    console.log('Кикнули:', reason.toString());
+    reconnect();
+  });
 
-// Слушаем сообщения от сервера
-bot.on('messagestr', (msg) => {
-  const message = msg.toLowerCase();
-  console.log('[Сервер]:', msg); // чтобы видеть, что пишет сервер
+  bot.on('end', () => {
+    console.log('Соединение разорвано');
+    reconnect();
+  });
 
-  // Если просят зарегистрироваться
-  if (!isLoggedIn && (message.includes('register') || message.includes('зарегистрируйтесь') || message.includes('/reg'))) {
-    bot.chat(`/register ${password} ${password}`);
-    console.log('Отправил /register');
-  }
+  bot.on('error', (err) => {
+    if (err.message.includes('PartialReadError')) return; // игнорируем
+    console.log('Ошибка:', err.message);
+  });
+}
 
-  // Если просят войти
-  if (!isLoggedIn && (message.includes('login') || message.includes('войдите') || message.includes('/login'))) {
-    bot.chat(`/login ${password}`);
-    console.log('Отправил /login');
-  }
+// Переподключение
+function reconnect() {
+  isLoggedIn = false;
+  console.log('Перезапуск через 10 секунд...');
+  setTimeout(createBot, 10000);
+}
 
-  // Если успешно вошли
-  if (message.includes('успешно') || message.includes('successfully') || message.includes('logged in') || message.includes('вы вошли')) {
-    isLoggedIn = true;
-    console.log('Успешно авторизовался!');
-  }
-});
-
-bot.on('kicked', (reason) => {
-  console.log('Кикнули:', reason.toString());
-  setTimeout(() => process.exit(1), 5000);
-});
-
-bot.on('error', (err) => {
-  console.log('Ошибка:', err.message);
-});
-
-bot.on('end', () => {
-  console.log('Отключился...');
-  setTimeout(() => process.exit(1), 5000);
-});
+// Запуск
+createBot();
