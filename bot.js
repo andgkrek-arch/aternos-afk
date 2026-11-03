@@ -47,15 +47,14 @@ function createBot() {
       }
     }, 2500);
 
-    // Анти-АФК
-    setInterval(() => {
-      if (!bot || !isLoggedIn) return;
-      try {
-        bot.setControlState('jump', true);
-        setTimeout(() => bot.setControlState('jump', false), 400);
-        bot.look(Math.random() * Math.PI * 2, 0);
-      } catch (e) {}
-    }, 30000);
+   // Лёгкий анти-АФК (почти не лагает)
+setInterval(() => {
+  if (!bot || !isLoggedIn) return;
+  try {
+    // Только слегка поворачивает голову раз в 45 секунд
+    bot.look(bot.entity.yaw + 0.3, 0);
+  } catch (e) {}
+}, 45000);
   });
 
   bot.on('messagestr', (msg) => {
